@@ -40,6 +40,9 @@ const CHANNELS = [
   // 漫剧：动态漫/AI漫剧在 TMDB 只靠关键词召回，且标题必带「动态漫 / AI漫剧版」之类的后缀，
   // 所以这里每个词单独给页数，并要求标题命中特征词才算数，避免「漫剧」这个词带回来的噪音。
   { id: 'manju', label: '漫剧', hint: 'AI漫剧 · 动态漫 · 漫改', plan: [['动态漫', 4], ['动态漫画', 3], ['漫剧', 5], ['AI漫剧', 2]], only: 'manju', minYear: 2021, allowNoYear: true },
+  // 红果：TMDB 对短剧收录滞后且不全，这里直接读红果的公开目录（真人剧/漫剧/AI剧），
+  // 片名与集数以站点为准，找完再回 PT 搜同名资源。只取元数据，不取播放流。
+  { id: 'hg', label: '红果', hint: '真人剧 · 漫剧 · AI剧 · 实时集数', src: 'hg' },
   { id: 'marry', label: '闪婚', hint: '闪婚 · 先婚后爱 · 契约', kw: ['闪婚', '先婚后爱', '契约'] },
   { id: 'sweet', label: '甜宠', hint: '甜宠 · 宠妻 · 娇宠', kw: ['甜宠', '宠妻', '娇宠', '甜妻'] },
   { id: 'counter', label: '逆袭', hint: '赘婿 · 打脸 · 豪婿', kw: ['赘婿', '打脸', '逆袭', '豪婿'], pages: 2 },
@@ -353,6 +356,13 @@ const CSS = `
 .dh-fchip:hover{color:var(--dh-text);border-color:#ffb08a}
 .dh-fchip.on{background:var(--dh-brand);color:#fff;border-color:transparent}
 .dh-fchip i{font-style:normal;font-size:10.5px;opacity:.85}
+.dh-hgtabs{display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 16px}
+.dh-pager{display:flex;gap:10px;align-items:center;justify-content:center;margin:22px 0 6px}
+.dh-pager button{height:34px;padding:0 15px;border-radius:10px;border:1px solid var(--dh-line);background:var(--dh-panel2);color:var(--dh-text);font-size:12.5px;font-weight:700;cursor:pointer;transition:.16s}
+.dh-pager button:hover:not(:disabled){border-color:#ffb08a}
+.dh-pager button:disabled{opacity:.38;cursor:default}
+.dh-pager span{font-size:12px;color:var(--dh-muted);min-width:96px;text-align:center}
+.dh-ep2{position:absolute;left:9px;top:9px;z-index:2;padding:2px 8px;border-radius:7px;background:rgba(0,0,0,.62);color:#fff;font-size:10.5px;font-weight:700;backdrop-filter:blur(4px)}
 .dh-ep{flex:0 0 auto;padding:1px 7px;border-radius:6px;font-size:10.5px;font-weight:700;vertical-align:1px;
   background:rgba(255,95,109,.12);color:var(--dh-brand);white-space:nowrap}
 .dh-ep.done{background:rgba(34,197,94,.13);color:#16a34a}
@@ -465,6 +475,12 @@ export async function mount(el, ctx) {
     channel: 'pick',
     query: '',
     items: [],
+    hgRoute: 'real-drama',
+    hgPage: 1,
+    hgPages: 1,
+    hgTotal: 0,
+    hgBusy: false,
+    hgCache: {},
     loading: false,
     detail: null,
     torrents: [],
@@ -564,7 +580,9 @@ export async function mount(el, ctx) {
     </div>
 
     <div class="dh-sec"><h3 data-k="sech">精选</h3><span data-k="sechint">红果式短剧聚合</span></div>
+    <div class="dh-hgtabs" data-k="hgtabs" style="display:none"></div>
     <div class="dh-grid" data-k="grid"></div>
+    <div class="dh-pager" data-k="hgpager" style="display:none"></div>
   </div>
 
   <div class="dh-mask" data-k="mask"></div>
@@ -1072,9 +1090,144 @@ export async function mount(el, ctx) {
     return out;
   };
 
-  const loadChannel = async (ch) => {
+  /** ---------- 红果：目录取数（后台作业）+ 渲染 ---------- */
+  const HG_ROUTES = [['real-drama', '真人剧'], ['comic-drama', '漫剧'], ['ai-drama', 'AI剧']];
+
+  /** 等作业跑完。红果一页 250KB 左右，通常 1~3 秒 */
+  const waitRun = async (id) => {
+    if (!id) return null;
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 400));
+      let r = null;
+      try { r = await ctx.tasks.get(id); } catch (e) { return null; }
+      if (!r) continue;
+      if (r.status === 'succeeded' || r.status === 'failed' || r.status === 'cancelled') return r;
+    }
+    return null;
+  };
+
+  /** 同一次一致的取数结果缓存 10 分钟，翻回来不会再打一次站点 */
+  const hgFetch = async (action, opts) => {
+    const key = action + ':' + (opts.route || '') + ':' + (opts.page || 1) + ':' + (opts.kw || opts.sid || '');
+    const hit = S.hgCache[key];
+    if (hit && (Date.now() - hit.at) < 10 * 60 * 1000) return hit;
+    const run = await ctx.tasks.run('hg', 'hg:' + key + ':' + Date.now(), Object.assign({ action: action }, opts));
+    const done = await waitRun(run && run.id);
+    if (!done || done.status !== 'succeeded') {
+      const msg = (done && (done.error || done.message)) || '取数超时';
+      throw new Error(String(msg).slice(0, 120));
+    }
+    const box = await readKV('hgq', null);
+    if (!box || box.key !== key) throw new Error('取数结果对不上，请重试一次');
+    S.hgCache[key] = box;
+    return box;
+  };
+
+  const renderHgTabs = () => {
+    const box = $('hgtabs');
+    if (!box) return;
+    if (S.channel !== 'hg') { box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    box.innerHTML = HG_ROUTES.map((r) =>
+      `<button class="dh-fchip ${S.hgRoute === r[0] ? 'on' : ''}" data-hgr="${r[0]}">${r[1]}</button>`).join('');
+    box.querySelectorAll('[data-hgr]').forEach((b) => b.addEventListener('click', () => {
+      const r = b.dataset.hgr;
+      if (r === S.hgRoute && S.hgPage === 1) return;
+      S.hgRoute = r;
+      S.hgPage = 1;
+      loadHg();
+    }));
+  };
+
+  const renderHgPager = () => {
+    const box = $('hgpager');
+    if (!box) return;
+    if (S.channel !== 'hg' || !S.items.length) { box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    const pages = Math.max(1, S.hgPages);
+    box.innerHTML = `<button data-hgp="-1"${S.hgPage <= 1 ? ' disabled' : ''}>上一页</button>
+      <span>第 ${S.hgPage} / ${pages} 页 · 共 ${S.hgTotal || S.items.length} 部</span>
+      <button data-hgp="1"${S.hgPage >= pages ? ' disabled' : ''}>下一页</button>`;
+    box.querySelectorAll('[data-hgp]').forEach((b) => b.addEventListener('click', () => {
+      const next = S.hgPage + Number(b.dataset.hgp);
+      if (next < 1 || next > pages) return;
+      S.hgPage = next;
+      loadHg();
+    }));
+  };
+
+  const renderHgItems = (items) => {
+    $('grid').style.display = '';
+    showFront(false);
+    if (!items.length) { return empty('红果这一页没有数据', '换一页，或换个分类'); }
+    $('grid').innerHTML = items.map((it, i) => `
+      <article class="dh-card" data-i="${i}">
+        <div class="dh-cover" style="${coverStyle(it.title)}">
+          <div class="dh-cg"></div>
+          <div class="dh-streak"></div>
+          <div class="dh-noise"></div>
+          <div class="dh-glyph">${glyphOf(it.title)}</div>
+          ${it.cover ? `<img class="dh-poster" src="${escapeHtml(it.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"/>` : ''}
+          ${it.ep ? `<div class="dh-ep2">${it.ep}集</div>` : ''}
+        </div>
+        <div class="dh-body">
+          <div class="dh-name">${escapeHtml(it.title)}</div>
+          <div class="dh-meta">${it.playable ? `<span class="dh-tag">可看 ${it.playable} 集</span>` : '<span class="dh-tag">目录</span>'}</div>
+        </div>
+        <div class="dh-hover">
+          <button class="dh-mini" data-hgfind="${i}">${ICONS.bolt}找资源</button>
+          <button class="dh-mini ghost" data-hgsub="${i}">订阅</button>
+        </div>
+      </article>`).join('');
+
+    $('grid').querySelectorAll('img.dh-poster').forEach((img) => {
+      img.addEventListener('error', () => img.classList.add('dh-off'));
+    });
+    $('grid').querySelectorAll('[data-hgfind]').forEach((b) => {
+      b.addEventListener('click', (e) => { e.stopPropagation(); searchPT(items[Number(b.dataset.hgfind)].title); });
+    });
+    $('grid').querySelectorAll('[data-hgsub]').forEach((b) => {
+      b.addEventListener('click', async (e) => { e.stopPropagation(); await addSub(items[Number(b.dataset.hgsub)]); });
+    });
+    $('grid').querySelectorAll('.dh-card').forEach((c) => {
+      c.addEventListener('click', () => searchPT(items[Number(c.dataset.i)].title));
+    });
+  };
+
+  const loadHg = async () => {
+    renderHgTabs();
     S.loading = true;
+    skeleton();
+    try {
+      const d = await hgFetch('list', { route: S.hgRoute, page: S.hgPage });
+      S.items = d.items || [];
+      S.hgPages = d.totalPages || 1;
+      S.hgTotal = d.total || S.items.length;
+      const label = HG_ROUTES.filter((r) => r[0] === d.route)[0];
+      $('sech').textContent = '红果 · ' + (label ? label[1] : '目录');
+      $('sechint').textContent = '站点实时目录 · 片名与集数以此为准';
+      renderHgItems(S.items);
+    } catch (e) {
+      S.items = [];
+      S.hgPages = 1;
+      $('grid').style.display = '';
+      empty('红果没读出来', `${escapeHtml(String(e && e.message ? e.message : e))}<br>可能是站点改版或网络不通，稍后再试。`);
+      toast('红果取数失败：' + (e && e.message ? e.message : e), 'err');
+    } finally {
+      S.loading = false;
+      renderHgPager();
+    }
+  };
+
+  const loadChannel = async (ch) => {
     const def = CHANNELS.find((c) => c.id === ch);
+    if (def && def.src === 'hg') return loadHg();
+    // 非红果频道：把红果的切换条和分页收起来
+    const tabBox = $('hgtabs');
+    const pgBox = $('hgpager');
+    if (tabBox) tabBox.style.display = 'none';
+    if (pgBox) pgBox.style.display = 'none';
+    S.loading = true;
     $('sech').textContent = def ? def.label : '';
     $('sechint').textContent = def ? def.hint : '';
     skeleton();
@@ -1344,7 +1497,7 @@ export async function mount(el, ctx) {
       onlyFree: true,
       autoNew: S.prefs.autoNew !== false,
       ep: 0,
-      total: 0,
+      total: Number(item.ep || item.total || 0),
       nextAt: 0,
       last: 0,
       lastResult: '等待首次巡检'

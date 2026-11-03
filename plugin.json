@@ -2,8 +2,8 @@
   "schema_version": 3,
   "id": "local.drama-hub",
   "name": "短剧广场",
-  "version": "1.4.4",
-  "description": "短剧广场：红果式 18 个分类聚合中文竖屏短剧与漫剧，真实海报、自动追新（只下新集、全集下完即停）、漫剧频道（动态漫/AI漫剧，PT 检索自动还原核心片名）、多站点并行的防风控 PT 检索（每站独立节奏+抖动、每部先问命中率最高的站、没搜到才流转、单站绝不并发、每日上限与时间预算断点续跑）、只下 free 与 2xfree 的免费种策略、下载器手动指定后固定使用、订阅自动下载与 Telegram 速递。",
+  "version": "1.5.0",
+  "description": "短剧广场：红果式 19 个分类聚合中文竖屏短剧与漫剧，新增红果目录频道（真人剧/漫剧/AI剧，实时片名与集数，按名找 PT 资源）、漫剧频道、自动追新（只下新集、全集下完即停）、多站点并行的防风控 PT 检索、只下 free 与 2xfree 的免费种。",
   "author": "哆啦A豆",
   "icon": "ui/icon.svg",
   "requires": {
@@ -33,6 +33,15 @@
       "title": "同步短剧库",
       "timeout_seconds": 900,
       "queue": false
+    },
+    {
+      "id": "hg",
+      "entry": "jobs/hg.js",
+      "handler": "run",
+      "recover": "recover",
+      "title": "红果目录取数",
+      "timeout_seconds": 120,
+      "allow_overlap": true
     },
     {
       "id": "digest",
@@ -68,8 +77,10 @@
       "POST /api/pt/download",
       "POST /api/extensions/v3/{id}/notify"
     ],
-    "sites": [],
+    "sites": [
+      "https://hongguoduanju.com"
+    ],
     "files": [],
-    "risk": "仅调用本机 DIAN115 宿主自有接口（TMDB 代理、Emby、PT、通知）。不读写宿主文件、不读取 Cookie 或 CookieCloud、不建立任何第三方直连、不上报任何数据。"
+    "risk": "仅调用本机 DIAN115 宿主自有接口（TMDB 代理、Emby、PT、通知）；红果频道向 hongguoduanju.com 读取公开的剧集目录（片名/集数/海报/简介），不读 Cookie、不取播放流；不上报任何数据到第三方。"
   }
 }
