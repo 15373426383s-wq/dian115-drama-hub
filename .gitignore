@@ -1,0 +1,16 @@
+# 打包产物与安装包
+*.dian115p
+*.dian115p.sha256
+
+# 本地验证与截图
+e2e_*.mjs
+test-subs.mjs
+test_*.mjs
+shot_*.png
+.tmp_backup/
+
+# 依赖与系统文件
+node_modules/
+.DS_Store
+Thumbs.db
+__pycache__/
