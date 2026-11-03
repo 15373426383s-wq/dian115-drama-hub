@@ -374,11 +374,7 @@ const CSS = `
 .dh-m-head{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:14px;
   background:var(--dh-panel);padding:22px 0 10px;margin:0 0 4px}
 .dh-modal h3{margin:0;font-size:18px;font-weight:800;flex:1 1 auto;min-width:0}
-.dh-m-x{flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:11px;
-  border:1px solid var(--dh-line,#dde0e9);background:var(--dh-panel2,#eef0f6);
-  color:var(--dh-muted,#727a8c);display:flex;align-items:center;justify-content:center;
-  cursor:pointer;transition:.16s;margin:-6px -6px -6px 0}
-.dh-m-x:hover{background:var(--dh-line,#e2e5ee);color:var(--dh-text,#171922)}
+.dh-m-x:hover{background:rgba(128,128,128,.26);color:var(--dh-text)}
 .dh-m-x:active{transform:scale(.94)}
 .dh-m-x:focus-visible{outline:2px solid #ff7a45;outline-offset:2px}
 .dh-modal .m-sub{margin:0 0 20px;font-size:12.5px;color:var(--dh-muted)}
@@ -598,7 +594,7 @@ export async function mount(el, ctx) {
     <div class="box">
       <div class="dh-m-head">
         <h3>广场设置</h3>
-        <button class="dh-m-x" data-act="closemodal" type="button" title="关闭" aria-label="关闭设置">${ICONS.x}</button>
+        <button class="dh-m-x" data-act="closemodal" type="button" title="关闭" aria-label="关闭设置" style="flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(128,128,128,.14);box-shadow:inset 0 0 0 1px rgba(128,128,128,.22);margin:-6px -6px -6px 0">${ICONS.x}</button>
       </div>
       <p class="m-sub">全部设置保存在插件自有存储，不写入宿主配置，不外发任何信息。</p>
 
