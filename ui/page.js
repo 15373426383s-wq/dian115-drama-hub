@@ -370,8 +370,16 @@ const CSS = `
 .dh-modal{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;padding:24px}
 .dh-modal.on{display:flex}
 .dh-modal .box{width:min(560px,100%);max-height:86vh;overflow-y:auto;background:var(--dh-panel);border-radius:22px;
-  box-shadow:var(--dh-shadow-lg);padding:24px 24px 20px;position:relative}
-.dh-modal h3{margin:0 0 4px;font-size:18px;font-weight:800}
+  box-shadow:var(--dh-shadow-lg);padding:0 24px 20px;position:relative}
+.dh-m-head{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:14px;
+  background:var(--dh-panel);padding:22px 0 10px;margin:0 0 4px}
+.dh-modal h3{margin:0;font-size:18px;font-weight:800;flex:1 1 auto;min-width:0}
+.dh-m-x{flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:11px;border:1px solid var(--dh-line);
+  background:var(--dh-panel2);color:var(--dh-muted);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:.16s;margin:-6px -6px -6px 0}
+.dh-m-x:hover{background:var(--dh-line);color:var(--dh-text)}
+.dh-m-x:active{transform:scale(.94)}
+.dh-m-x:focus-visible{outline:2px solid #ff7a45;outline-offset:2px}
 .dh-modal .m-sub{margin:0 0 20px;font-size:12.5px;color:var(--dh-muted)}
 .dh-field{margin-bottom:16px}
 .dh-field label{display:block;font-size:12.5px;font-weight:700;margin-bottom:7px}
@@ -587,7 +595,10 @@ export async function mount(el, ctx) {
 
   <div class="dh-modal" data-k="modal">
     <div class="box">
-      <h3>广场设置</h3>
+      <div class="dh-m-head">
+        <h3>广场设置</h3>
+        <button class="dh-m-x" data-act="closemodal" type="button" title="关闭" aria-label="关闭设置">${ICONS.x}</button>
+      </div>
       <p class="m-sub">全部设置保存在插件自有存储，不写入宿主配置，不外发任何信息。</p>
 
       <div class="dh-field">
