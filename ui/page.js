@@ -476,6 +476,7 @@ export async function mount(el, ctx) {
     query: '',
     items: [],
     hgRoute: 'real-drama',
+    hgKw: '',
     hgPage: 1,
     hgPages: 1,
     hgTotal: 0,
@@ -1133,6 +1134,7 @@ export async function mount(el, ctx) {
     box.querySelectorAll('[data-hgr]').forEach((b) => b.addEventListener('click', () => {
       const r = b.dataset.hgr;
       if (r === S.hgRoute && S.hgPage === 1) return;
+      S.hgKw = '';
       S.hgRoute = r;
       S.hgPage = 1;
       loadHg();
@@ -1199,13 +1201,21 @@ export async function mount(el, ctx) {
     S.loading = true;
     skeleton();
     try {
-      const d = await hgFetch('list', { route: S.hgRoute, page: S.hgPage });
+      const searching = S.hgRoute === 'search' && S.hgKw;
+      const d = searching
+        ? await hgFetch('search', { kw: S.hgKw, page: S.hgPage })
+        : await hgFetch('list', { route: S.hgRoute, page: S.hgPage });
       S.items = d.items || [];
       S.hgPages = d.totalPages || 1;
       S.hgTotal = d.total || S.items.length;
-      const label = HG_ROUTES.filter((r) => r[0] === d.route)[0];
-      $('sech').textContent = '红果 · ' + (label ? label[1] : '目录');
-      $('sechint').textContent = '站点实时目录 · 片名与集数以此为准';
+      if (searching) {
+        $('sech').textContent = '红果 · 搜索「' + S.hgKw + '」';
+        $('sechint').textContent = d.total ? ('共 ' + d.total + ' 部 · 第 ' + S.hgPage + ' 页') : '站点没有匹配的剧';
+      } else {
+        const label = HG_ROUTES.filter((r) => r[0] === d.route)[0];
+        $('sech').textContent = '红果 · ' + (label ? label[1] : '目录');
+        $('sechint').textContent = '站点实时目录 · 片名与集数以此为准';
+      }
       renderHgItems(S.items);
     } catch (e) {
       S.items = [];
@@ -1838,6 +1848,7 @@ export async function mount(el, ctx) {
     e.preventDefault();
     const kw = q.value.trim();
     if (!kw) return;
+    if (S.channel === 'hg') { hgSearch(kw); return; }
     S.loading = true;
     $('sech').textContent = `搜索：${kw}`;
     $('sechint').textContent = 'TMDB 结果';
@@ -1851,6 +1862,36 @@ export async function mount(el, ctx) {
       empty('搜索失败', escapeHtml(err && err.message ? err.message : String(err)));
     } finally { S.loading = false; }
   });
+
+  /** 红果频道内的独立搜索：片名以站点为准，比 TMDB 全，也更适合拿去 PT 搜 */
+  const hgSearch = async (kw) => {
+    if (!kw) return;
+    S.channel = 'hg';
+    S.hgKw = kw;
+    S.hgPage = 1;
+    renderChips();
+    renderHgTabs();
+    S.loading = true;
+    skeleton();
+    try {
+      const d = await hgFetch('search', { kw: kw, page: 1 });
+      S.items = d.items || [];
+      S.hgPages = d.totalPages || 1;
+      S.hgTotal = d.total || S.items.length;
+      $('sech').textContent = '红果 · 搜索「' + kw + '」';
+      $('sechint').textContent = d.total ? ('共 ' + d.total + ' 部，片名与集数以站点为准') : '站点没有匹配的剧';
+      S.hgRoute = 'search';
+      renderHgItems(S.items);
+      renderHgTabs();
+      if (!S.items.length) toast('红果里没有搜到，换个词试试');
+    } catch (err) {
+      S.items = [];
+      empty('红果搜索失败', escapeHtml(String(err && err.message ? err.message : err)));
+    } finally {
+      S.loading = false;
+      renderHgPager();
+    }
+  };
 
   /** ---------- 订阅：巡检与列表 ---------- */
   const whenText = (ts) => {
