@@ -374,10 +374,11 @@ const CSS = `
 .dh-m-head{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:14px;
   background:var(--dh-panel);padding:22px 0 10px;margin:0 0 4px}
 .dh-modal h3{margin:0;font-size:18px;font-weight:800;flex:1 1 auto;min-width:0}
-.dh-m-x{flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:11px;border:1px solid var(--dh-line);
-  background:var(--dh-panel2);color:var(--dh-muted);display:flex;align-items:center;justify-content:center;
+.dh-m-x{flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:11px;
+  border:1px solid var(--dh-line,#dde0e9);background:var(--dh-panel2,#eef0f6);
+  color:var(--dh-muted,#727a8c);display:flex;align-items:center;justify-content:center;
   cursor:pointer;transition:.16s;margin:-6px -6px -6px 0}
-.dh-m-x:hover{background:var(--dh-line);color:var(--dh-text)}
+.dh-m-x:hover{background:var(--dh-line,#e2e5ee);color:var(--dh-text,#171922)}
 .dh-m-x:active{transform:scale(.94)}
 .dh-m-x:focus-visible{outline:2px solid #ff7a45;outline-offset:2px}
 .dh-modal .m-sub{margin:0 0 20px;font-size:12.5px;color:var(--dh-muted)}
