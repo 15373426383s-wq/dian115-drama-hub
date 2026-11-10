@@ -93,6 +93,14 @@ export async function submit(ctx, input) {
     throw new Error(friendlyError(data.error || '下载器拒绝了该种子', downloaderName));
   }
 
+  // 结果未知：请求已发出但宿主无法确认。不报成功、不重发，交给用户核对。
+  if (data && data.state_uncertain === true) {
+    await ctx.task.update({ stage: 'attention', message: '提交结果未知，请到下载器核对' });
+    await ctx.task.checkpoint({ stage: 'before-submit', payload, title: src.title || '', uncertain: true });
+    await ctx.task.log('宿主返回 state_uncertain：已发出但结果未知，未标记为成功，请到下载器核对');
+    return { submitted: false, uncertain: true, result };
+  }
+
   await ctx.task.update({ stage: 'done', message: '已加入下载队列', progress: 100 });
   await ctx.task.checkpoint({ stage: 'submitted', result, title: src.title || '' });
 

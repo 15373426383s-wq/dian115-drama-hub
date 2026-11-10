@@ -377,7 +377,7 @@ export async function run(ctx, input) {
   const finish = function (job, sub, kind) {
     subsDone += 1;
     if (!sub) return;
-    if (kind === 'fail') {
+    if (kind === 'fail' || kind === 'attention') {
       sub.last = Date.now();
       sub.nextAt = sub.last + 30 * 60 * 1000;
       return;
@@ -437,9 +437,10 @@ export async function run(ctx, input) {
     pool[i].nextFree = now0 + Math.round(Math.random() * pool[i].gap * 400);
   }
 
+  // 宿主限制单次运行最多 32 个并发宿主调用；一批就是一个并发，这里硬性封顶。
+  const MAX_BATCH = 32;
   while (queue.length) {
     if (Date.now() >= budgetEnd) { stopReason = 'budget'; break; }
-
     const alive = aliveSites();
     if (!alive.length) { stopReason = 'sites'; break; }
 
@@ -449,6 +450,7 @@ export async function run(ctx, input) {
 
     const batch = [];
     for (let i = 0; i < ready.length; i++) {
+      if (batch.length >= MAX_BATCH) break;
       const site = ready[i];
       if (dailyCap > 0 && dayCount(site.id) >= dailyCap) { site.dead = true; continue; }
       const job = takeJob(site);
@@ -572,6 +574,15 @@ export async function run(ctx, input) {
         if (data && data.success === false) {
           throw new Error(String(data.error || '下载器拒绝了该种子'));
         }
+        // 宿主可能返回 state_uncertain：请求已发出但结果未知。此时不推进集数、不标记 complete，
+        // 也不把种子记进 done（下一轮仍会重试），只把订阅标成需要核对。
+        if (data && data.state_uncertain === true) {
+          sub.lastResult = '已提交，但宿主返回结果未知，请到下载器核对';
+          await ctx.task.log('「' + name + '」提交结果未知（state_uncertain），未推进进度');
+          job.claim = false;
+          finish(job, sub, 'attention');
+          continue;
+        }
         submitOk = true;
         // 成功后记进度：集数只增不减，全集下完即停
         if (best.ep.has) {
@@ -688,4 +699,13 @@ export async function run(ctx, input) {
     sites: pool.length,
     stop: stopReason || 'drained'
   };
+}
+
+// 恢复：提交途中的中断无法确认是否已加入下载队列，按宿主契约要求人工核对，绝不自动重发。
+export async function recover(ctx, checkpoint) {
+  if (checkpoint && (checkpoint.stage === 'before-submit' || checkpoint.uncertain)) {
+    await ctx.task.log('上次运行中断在提交过程中，无法确认是否已提交，请到下载器核对');
+    return { action: 'attention' };
+  }
+  return { action: 'resume' };
 }

@@ -1094,10 +1094,10 @@ export async function mount(el, ctx) {
   /** ---------- 红果：目录取数（后台作业）+ 渲染 ---------- */
   const HG_ROUTES = [['real-drama', '真人剧'], ['comic-drama', '漫剧'], ['ai-drama', 'AI剧']];
 
-  /** 等作业跑完。红果一页 250KB 左右，通常 1~3 秒 */
+  /** 等作业跑完。红果一页 250KB 左右，通常 1~3 秒；作业超时是 120 秒，这里按同一量级等，避免提前报超时 */
   const waitRun = async (id) => {
     if (!id) return null;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 300; i++) {
       await new Promise((r) => setTimeout(r, 400));
       let r = null;
       try { r = await ctx.tasks.get(id); } catch (e) { return null; }
